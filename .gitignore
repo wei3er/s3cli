@@ -1,0 +1,7 @@
+.ignore
+**/.zzz
+.ignore
+bin
+pkg
+vendor
+etc
