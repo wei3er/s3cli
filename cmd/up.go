@@ -41,67 +41,61 @@ func init() {
 func up(cmd *cobra.Command, args []string) {
 	bucket := FindBucket(args[0])
 
-	file, err := os.Open(args[1])
+	sourceBase := args[1]
+	fileInfo, err := os.Stat(sourceBase)
 	s3base.CheckIfError(1, err)
-	defer file.Close()
-	basePath, err := filepath.Abs(file.Name())
-	s3base.CheckIfError(2, err)
-	fileInfo, err := file.Stat()
-	s3base.CheckIfError(3, err)
 
 	key := ""
 	if len(args) > 2 {
 		key = args[2]
 	}
 
-	if !fileInfo.IsDir() {
-		bucket.Upload(createKey(key, basePath, filepath.Dir(basePath)), file)
-	} else {
+	if fileInfo.IsDir() {
 		if !uploadFlags.recursive {
-			log.Fatalf("file %s is a directory (use recursive flag)", file.Name())
+			log.Fatalf("file %s is a directory (use recursive flag)", sourceBase)
+			return
 		}
-
-		err := filepath.Walk(file.Name(),
+		err := filepath.Walk(sourceBase,
 			func(p string, fi os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
+				s3base.CheckIfError(2, err)
 				if !fi.IsDir() {
 					f, err := os.Open(p)
-					if err != nil {
-						return err
-					}
+					s3base.CheckIfError(3, err)
 					defer f.Close()
-					bucket.Upload(createKey(key, p, basePath), f)
+					return bucket.Upload(createKey(key, p, sourceBase), f)
 				}
 				return nil
 			})
-		if err != nil {
-			log.Fatal(err)
-		}
+		s3base.CheckIfError(4, err)
+	} else {
+		f, err := os.Open(sourceBase)
+		s3base.CheckIfError(5, err)
+		defer f.Close()
+		err = bucket.Upload(createKey(key, sourceBase, filepath.Dir(sourceBase)), f)
+		s3base.CheckIfError(6, err)
 	}
 }
 
-func createKey(key string, file string, basePath string) string {
-	if key == "" || uploadFlags.recursive {
-		a, err := filepath.Abs(file)
+func createKey(keyPrefix string, source string, sourceBasePath string) string {
+	if keyPrefix == "" || uploadFlags.recursive {
+		a, err := filepath.Abs(source)
 		s3base.CheckIfError(1, err)
 		switch uploadFlags.keyMode {
 		case "b":
 			fallthrough
 		case "B":
-			return key + filepath.Base(a)
+			return keyPrefix + filepath.Base(a)
 		case "A":
 			fallthrough
 		case "a":
-			return key + strings.ReplaceAll(a, string(os.PathSeparator), uploadFlags.keyToPathDelimiter)
+			return keyPrefix + strings.ReplaceAll(a, string(os.PathSeparator), uploadFlags.keyToPathDelimiter)
 		case "R":
 			fallthrough
 		case "r":
-			return key + strings.ReplaceAll(strings.TrimPrefix(a, basePath), string(os.PathSeparator), uploadFlags.keyToPathDelimiter)
+			return keyPrefix + strings.ReplaceAll(strings.TrimPrefix(a, sourceBasePath), string(os.PathSeparator), uploadFlags.keyToPathDelimiter)
 		default:
 			log.Fatalf("invalid key mode %s specified!", uploadFlags.keyMode)
 		}
 	}
-	return key
+	return keyPrefix
 }

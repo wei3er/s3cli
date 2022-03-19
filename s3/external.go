@@ -1,8 +1,10 @@
 package s3
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"io/fs"
 	"io/ioutil"
 	"net/http"
@@ -156,6 +158,10 @@ func (bucket S3Bucket) Upload(key string, file *os.File) error {
 	if err != nil {
 		return err
 	}
-	_, err = curl(bucket, "PUT", reqUrl, file)
+	b, err := io.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	_, err = curl(bucket, "PUT", reqUrl, bytes.NewReader(b))
 	return err
 }
