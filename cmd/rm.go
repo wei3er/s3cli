@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
-	s3sss "s3cli/sss"
+	s3 "s3cli/s3"
 
 	cobra "github.com/spf13/cobra"
 )
@@ -38,7 +38,7 @@ func init() {
 	rootCmd.AddCommand(rmCmd)
 }
 
-func (div *deletingItemVisitor) VisitDeletion(partialResult *s3sss.S3DeleteResult) bool {
+func (div *deletingItemVisitor) VisitDeletion(partialResult *s3.S3DeleteResult) error {
 	for _, item := range partialResult.Deleted {
 		fmt.Printf("'%s' deleted\n", item.Key)
 	}
@@ -46,18 +46,18 @@ func (div *deletingItemVisitor) VisitDeletion(partialResult *s3sss.S3DeleteResul
 		div.failed = true
 		fmt.Printf("'%s' not deleted: %s -> %s\n", item.Key, item.Code, item.Message)
 	}
-	return true
+	return nil
 }
 
-func (div *deletingItemVisitor) VisitListing(partialResult *s3sss.S3ListBucketResult) bool {
+func (div *deletingItemVisitor) VisitListing(partialResult *s3.S3ListBucketResult) (bool, error) {
 	for _, item := range partialResult.Contents {
 		div.keys = append(div.keys, item.Key)
 	}
-	return true
+	return true, nil
 }
 
 func rm(cmd *cobra.Command, args []string) {
-	bucket := s3sss.FindBucket(args[0])
+	bucket := FindBucket(args[0])
 	key := args[1]
 
 	visitor := &deletingItemVisitor{
@@ -66,10 +66,10 @@ func rm(cmd *cobra.Command, args []string) {
 	}
 	bucket.List(key, rmFlags.fetchSize, visitor)
 	if len(visitor.keys) == 0 {
-		log.Fatalf("no objects found for key '%s'!", key)
+		log.Fatalf("no objects found for key '%s'", key)
 	}
 	if len(visitor.keys) > 1 && !rmFlags.recursive {
-		log.Fatalf("%d objects found for key '%s'!\nretry using -r switch.", len(visitor.keys), key)
+		log.Fatalf("%d objects found for key '%s'\nmaybe retry using -r switch", len(visitor.keys), key)
 	}
 	bucket.Delete(visitor, visitor.keys...)
 	if visitor.failed {

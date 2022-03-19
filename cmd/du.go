@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	s3base "s3cli/base"
-	s3sss "s3cli/sss"
+	s3 "s3cli/s3"
 
 	"github.com/spf13/cobra"
 )
@@ -48,7 +48,7 @@ func du(cmd *cobra.Command, args []string) {
 	if len(args) > 1 {
 		prefix = args[1]
 	}
-	bucket := s3sss.FindBucket(args[0])
+	bucket := FindBucket(args[0])
 	visitor := &usageComputingItemVisitor{}
 	bucket.List(prefix, duFlags.fetchSize, visitor)
 	if duFlags.humanReadable {
@@ -58,10 +58,10 @@ func du(cmd *cobra.Command, args []string) {
 	}
 }
 
-func (uciv *usageComputingItemVisitor) VisitListing(partialResult *s3sss.S3ListBucketResult) bool {
+func (uciv *usageComputingItemVisitor) VisitListing(partialResult *s3.S3ListBucketResult) (bool, error) {
 	for _, item := range partialResult.Contents {
 		uciv.Count = uciv.Count + 1
 		uciv.Size = uciv.Size + item.Size
 	}
-	return true
+	return true, nil
 }

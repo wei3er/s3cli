@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	s3 "s3cli/s3"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -76,4 +77,16 @@ func readConfiguration() {
 		log.Fatalf("error reading config file: %w", err)
 	}
 	log.Info("using config file at ", viper.ConfigFileUsed())
+}
+
+func FindBucket(name string) s3.S3Bucket {
+	var s3Buckets []s3.S3Bucket
+	viper.UnmarshalKey("buckets", &s3Buckets)
+	for _, b := range s3Buckets {
+		if name == b.Name {
+			return b
+		}
+	}
+	log.Fatalf("bucket '%s' is unknown", name)
+	return s3.S3Bucket{}
 }

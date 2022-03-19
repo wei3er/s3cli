@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"os"
+	"path"
 	s3base "s3cli/base"
-	s3sss "s3cli/sss"
+	s3 "s3cli/s3"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 
 	cobra "github.com/spf13/cobra"
 )
@@ -28,7 +31,7 @@ var (
 		Aliases:    []string{"download", "get"},
 		Short:      "downloads objects",
 		Long:       `downloads objects to S3.`,
-		Run:        download,
+		Run:        down,
 		Args:       cobra.MinimumNArgs(2),
 		ArgAliases: []string{"bucket", "key-prefix", "local-path"},
 	}
@@ -44,49 +47,99 @@ func init() {
 }
 
 type downloadingItemVisitor struct {
-	force  bool
-	bucket s3sss.S3Bucket
-	key    string
+	bucket s3.S3Bucket
 	path   string
 }
 
-func (div downloadingItemVisitor) VisitListing(partialResult *s3sss.S3ListBucketResult) bool {
+func (div downloadingItemVisitor) VisitListing(partialResult *s3.S3ListBucketResult) (bool, error) {
 	for _, item := range partialResult.Contents {
-		tmpPath := div.path
-		if tmpPath == "" {
-			tmpPath = "."
-		}
-		if !strings.HasSuffix(tmpPath, "/") {
-			tmpPath = tmpPath + "/"
-		}
-		itemKey := strings.TrimPrefix(item.Key, "/")
-		div.bucket.Download(item.Key, tmpPath+itemKey, div.force)
+		download(div.bucket, item.Key, div.path, false)
 	}
-	return true
+	return true, nil
 }
 
-func download(cmd *cobra.Command, args []string) {
-	bucket := s3sss.FindBucket(args[0])
+func down(cmd *cobra.Command, args []string) {
+	bucket := FindBucket(args[0])
 	key := args[1]
+
 	path, err := os.Getwd()
 	s3base.CheckIfError(2, err)
 	if len(args) > 2 {
 		path = args[2]
 	}
 
+	fi, err := os.Stat(path)
 	if downloadFlags.recursive {
-		bucket.List(key, downloadFlags.fetchSize, downloadingItemVisitor{
-			force:  downloadFlags.force,
-			bucket: bucket,
-			key:    key,
-			path:   path,
-		})
-	} else {
-		if path == "" {
-			bucket.Download(key, key, downloadFlags.force)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				log.Fatalf("error reading stats of %s: %w", path, err)
+			}
+			bucket.List(key, downloadFlags.fetchSize, downloadingItemVisitor{
+				bucket: bucket,
+				path:   path,
+			})
+			return
 
-		} else {
-			bucket.Download(key, path, downloadFlags.force)
+		}
+		if fi.IsDir() {
+			bucket.List(key, downloadFlags.fetchSize, downloadingItemVisitor{
+				bucket: bucket,
+				path:   path,
+			})
+			return
+		}
+		log.Fatalf("recursive download target %s needs to be a directory", path)
+		return
+	}
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Fatalf("error reading stats of %s: %w", path, err)
+			return
+		}
+		download(bucket, key, path, true)
+		return
+
+	} else {
+		if fi.IsDir() {
+			download(bucket, key, path, false)
+			return
+		}
+		if downloadFlags.force {
+			download(bucket, key, path, true)
+			return
+		}
+		log.Fatalf("file %s already exists (use force flag)", path)
+		return
+	}
+}
+
+func download(bucket s3.S3Bucket, key string, targetPath string, exact bool) {
+	target := targetPath
+	if !exact {
+		target = convertKey(targetPath, key)
+	}
+	_, err := os.Stat(target)
+	if err == nil {
+		if !downloadFlags.force {
+			log.Fatalf("file %s already exists (use force flag)", target)
+		}
+	} else {
+		if !os.IsNotExist(err) {
+			log.Fatal(err)
 		}
 	}
+	dir := path.Dir(target)
+	err = os.MkdirAll(dir, os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = bucket.Download(key, target)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func convertKey(path string, key string) string {
+	sep := string(os.PathSeparator)
+	return strings.TrimSuffix(path, sep) + sep + strings.TrimPrefix(strings.ReplaceAll(key, downloadFlags.keyToPathDelimiter, sep), sep)
 }

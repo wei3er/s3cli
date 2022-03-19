@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	s3base "s3cli/base"
-	s3sss "s3cli/sss"
 	"strings"
 
 	cobra "github.com/spf13/cobra"
@@ -40,7 +39,7 @@ func init() {
 }
 
 func up(cmd *cobra.Command, args []string) {
-	bucket := s3sss.FindBucket(args[0])
+	bucket := FindBucket(args[0])
 
 	file, err := os.Open(args[1])
 	s3base.CheckIfError(1, err)

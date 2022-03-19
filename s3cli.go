@@ -10,12 +10,19 @@ import (
 func init() {
 	log.SetLevel(log.ErrorLevel)
 	formatter := prefixed.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: "2006-01-02 15:04:05",
+		ForceColors:      true,
+		DisableTimestamp: true,
+		TimestampFormat:  "2006-01-02 15:04:05",
 	}
 	formatter.SetColorScheme(&prefixed.ColorScheme{
-		PrefixStyle:    "blue+b",
-		TimestampStyle: "white+h",
+		PanicLevelStyle: "red",
+		FatalLevelStyle: "red",
+		ErrorLevelStyle: "red",
+		WarnLevelStyle:  "yellow",
+		InfoLevelStyle:  "green",
+		DebugLevelStyle: "blue",
+		PrefixStyle:     "cyan",
+		TimestampStyle:  "black+h",
 	})
 	log.SetFormatter(&formatter)
 	//log.SetFormatter(&log.JSONFormatter{})

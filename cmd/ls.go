@@ -3,8 +3,9 @@ package cmd
 import (
 	"fmt"
 	s3base "s3cli/base"
-	s3sss "s3cli/sss"
+	s3 "s3cli/s3"
 	"strconv"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -48,11 +49,11 @@ func ls(cmd *cobra.Command, args []string) {
 	if len(args) > 1 {
 		prefix = args[1]
 	}
-	bucket := s3sss.FindBucket(args[0])
+	bucket := FindBucket(args[0])
 	bucket.List(prefix, lsFlags.fetchSize, dumpingItemVisitor{})
 }
 
-func (div dumpingItemVisitor) VisitListing(partialResult *s3sss.S3ListBucketResult) bool {
+func (div dumpingItemVisitor) VisitListing(partialResult *s3.S3ListBucketResult) (bool, error) {
 	for _, item := range partialResult.Contents {
 		row := item.Key
 		if lsFlags.longListFormat {
@@ -60,9 +61,9 @@ func (div dumpingItemVisitor) VisitListing(partialResult *s3sss.S3ListBucketResu
 			if lsFlags.humanReadable {
 				size = s3base.ByteCountIEC(item.Size)
 			}
-			row = fmt.Sprintf("%s\t%s(%s)\t%s\t%s", item.StorageClass, item.Owner.DisplayName, item.Owner.Id, size, row)
+			row = fmt.Sprintf("%s\t%s(%s)\t%s\t%s\t%s", item.StorageClass, item.Owner.DisplayName, item.Owner.Id, item.LastModified.Format(time.RFC3339), size, row)
 		}
 		fmt.Println(row)
 	}
-	return true
+	return true, nil
 }
