@@ -30,9 +30,17 @@ func curl(bucket S3Bucket, method string, reqUrl *url.URL, payload io.Reader) (*
 	client := &http.Client{
 		Timeout: time.Second * time.Duration(10),
 	}
-	err = signAwsV4(bucket, req)
+	header, err := signAwsV4(bucket, req, time.Now().UTC())
 	if err != nil {
 		return nil, err
+	}
+	// write header to request
+	req.Header.Set("User-Agent", "s3 cli")
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	for k, v := range header {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := client.Do(req)
@@ -55,15 +63,9 @@ func curl(bucket S3Bucket, method string, reqUrl *url.URL, payload io.Reader) (*
  * https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
  *
  */
-func signAwsV4(b S3Bucket, req *http.Request) error {
-	now := time.Now().UTC()
-
+func signAwsV4(b S3Bucket, req *http.Request, now time.Time) (map[string]string, error) {
 	header := make(map[string]string)
 	header["X-Amz-Date"] = now.Format("20060102T150405Z")
-	header["User-Agent"] = "s3 cli"
-	header["Accept"] = "*/*"
-	header["Accept-Encoding"] = "gzip, deflate, br"
-	header["Connection"] = "keep-alive"
 
 	/*
 	 * read payload content
@@ -73,11 +75,11 @@ func signAwsV4(b S3Bucket, req *http.Request) error {
 	if req.GetBody != nil {
 		payload, err := req.GetBody()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		content, err = ioutil.ReadAll(payload)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -167,9 +169,5 @@ func signAwsV4(b S3Bucket, req *http.Request) error {
 	hash.Write([]byte(content))
 	header["Content-MD5"] = base64.StdEncoding.EncodeToString(hash.Sum(nil))
 
-	// write header to request
-	for k, v := range header {
-		req.Header.Set(k, v)
-	}
-	return nil
+	return header, nil
 }
